@@ -252,28 +252,93 @@ module StarcoinFramework::GenesisDao{
 
         let nft_mint_cap = &mut borrow_global_mut<DaoNFTMintCapHolder<DaoT>>(dao_address).cap;
 
-        let nft = NFT::mint_with_cap_v2(dao_address, nft_mint_cap, basemeta, meta, body);
-        IdentifierNFT::grant(nft_mint_cap, to_signer, nft);
+        let nft = NFT::mint_with_cap_v2<DaoMember<DaoT>,DaoMemberBody<DaoT>>(dao_address, nft_mint_cap, basemeta, meta, body);
+        IdentifierNFT::grant<DaoMember<DaoT>,DaoMemberBody<DaoT>>(nft_mint_cap, to_signer, nft);
     }
 
     /// Member quit Dao by self 
-    public fun quit_member<DaoT>(sender: &signer){
+    public fun quit_member<DaoT:store>(sender: &signer) acquires DaoNFTBurnCapHolder, DaoAccountCapHolder{
+        let to_address = Signer::address_of(sender);
+        assert!(is_member<DaoT>(to_address), 11);
+
+        let dao_address = dao_address<DaoT>();
+        let dao_signer = dao_signer<DaoT>();
+
+        let nft_burn_cap = &mut borrow_global_mut<DaoNFTBurnCapHolder<DaoT>>(dao_address).cap;
+
         //revoke IdentifierNFT
+        let nft =  IdentifierNFT::revoke<DaoMember<DaoT>,DaoMemberBody<DaoT>>( nft_burn_cap,to_address);
+        
         //burn NFT
+        let DaoMemberBody<DaoT>{
+            sbt,
+        } = NFT::burn_with_cap<DaoMember<DaoT>,DaoMemberBody<DaoT>>( nft_burn_cap , nft);
+        
+        IdentifierNFT::destroy_empty<DaoMember<DaoT>,DaoMemberBody<DaoT>>(sender);
+        
         //burn SBT Token
+        Token::burn<DaoT>(&dao_signer,sbt);
     }
 
     /// Revoke membership with cap
-    public fun revoke_member<DaoT:store>(_cap: &DaoMemberCap<DaoT>, member_addr: address){
+    public fun revoke_member<DaoT:store>(_cap: &DaoMemberCap<DaoT>, member_addr: address)  acquires DaoNFTBurnCapHolder, DaoAccountCapHolder {
+        
+        assert!(is_member<DaoT>(member_addr), 11);
+
+        let dao_address = dao_address<DaoT>();
+        let dao_signer = dao_signer<DaoT>();
+
+        let nft_burn_cap = &mut borrow_global_mut<DaoNFTBurnCapHolder<DaoT>>(dao_address).cap;
+        
         //revoke IdentifierNFT
+        let nft =  IdentifierNFT::revoke<DaoMember<DaoT>,DaoMemberBody<DaoT>>( nft_burn_cap,member_addr);
+        
         //burn NFT
+        let DaoMemberBody<DaoT>{
+            sbt,
+        } = NFT::burn_with_cap<DaoMember<DaoT>,DaoMemberBody<DaoT>>( nft_burn_cap , nft);
+        
         //burn SBT Token
+        Token::burn<DaoT>(&dao_signer,sbt);
     }
 
-    public fun update_member_sbt<DaoT:store>(_cap: &DaoMemberCap<DaoT>, member_addr: address, new_amount: u128){
-        //borrow mut the NFT
+    public fun update_member_sbt<DaoT:store>(_cap: &DaoMemberCap<DaoT>, member_addr: address, new_amount: u128) acquires DaoNFTMintCapHolder, DaoNFTBurnCapHolder,DaoNFTUpdateCapHolder,DaoAccountCapHolder{
+        
+        assert!(is_member<DaoT>(member_addr), 11);
+
+        let dao_address = dao_address<DaoT>();
+        let dao_signer = dao_signer<DaoT>();
+
+        let nft_burn_cap = &mut borrow_global_mut<DaoNFTBurnCapHolder<DaoT>>(dao_address).cap;
+        
+        //revoke IdentifierNFT
+        let nft =  IdentifierNFT::revoke<DaoMember<DaoT>,DaoMemberBody<DaoT>>( nft_burn_cap , member_addr);
+        
+        
         // compare sbt and new_amount
+        let nft_update_cap = &mut borrow_global_mut<DaoNFTUpdateCapHolder<DaoT>>(dao_address).cap;
+        
+        let nft_body = NFT::borrow_body_mut_with_cap<DaoMember<DaoT>,DaoMemberBody<DaoT>>(nft_update_cap , &mut nft);
+
+        let sbt = &mut nft_body.sbt;
         // mint more sbt token or burn sbt token
+        let old_sbt_value = Token::value<DaoT>(sbt);
+
+        if( old_sbt_value > new_amount){
+
+            Token::burn<DaoT>(&dao_signer , Token::withdraw<DaoT>( sbt , old_sbt_value - new_amount));    
+        
+        }else if(old_sbt_value < new_amount){
+        
+            Token::deposit<DaoT>(sbt , Token::mint<DaoT>(&dao_signer , new_amount - old_sbt_value));  
+        
+        }else{
+            
+        };
+
+        let nft_mint_cap = &mut borrow_global_mut<DaoNFTMintCapHolder<DaoT>>(dao_address).cap;
+        IdentifierNFT::grant_to<DaoMember<DaoT>,DaoMemberBody<DaoT>>(nft_mint_cap, member_addr, nft);
+        
     }
 
     /// Check the `member_addr` account is a member of DaoT
