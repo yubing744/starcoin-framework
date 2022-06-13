@@ -337,7 +337,7 @@ module StarcoinFramework::GenesisDao{
         };
 
         let nft_mint_cap = &mut borrow_global_mut<DaoNFTMintCapHolder<DaoT>>(dao_address).cap;
-        IdentifierNFT::grant_to<DaoMember<DaoT>,DaoMemberBody<DaoT>>(nft_mint_cap, member_addr, nft);
+        IdentifierNFT::grant<DaoMember<DaoT>,DaoMemberBody<DaoT>>(nft_mint_cap, member_addr, nft);
         
     }
 
